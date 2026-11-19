@@ -1,0 +1,6 @@
+import * as ort from './vendor/ort/ort.wasm.min.mjs';
+import {DemucsProcessor} from './vendor/demucs/src/processor.js';
+import {inferenceThreads} from './audio-utils.js';
+ort.env.wasm.numThreads=inferenceThreads(globalThis.crossOriginIsolated,globalThis.navigator?.hardwareConcurrency);ort.env.wasm.proxy=false;ort.env.wasm.wasmPaths=new URL('./vendor/ort/',import.meta.url).href;
+let processor;
+self.onmessage=async({data})=>{try{if(data.type==='load'){await processor?.session?.release();processor=new DemucsProcessor({ort,sessionOptions:{executionProviders:['wasm'],graphOptimizationLevel:'basic'},onProgress:p=>self.postMessage({type:'progress',value:Math.min(1,p.progress),segment:p.currentSegment,total:p.totalSegments})});await processor.loadModel(data.buffer);self.postMessage({type:'ready',threads:ort.env.wasm.numThreads});}else if(data.type==='separate'){if(!processor)throw Error('Carregue a IA antes de separar.');processor.segmentOverlap=data.overlap===.25?.25:.10;const result=await processor.separate(data.left,data.right);const transfers=Object.values(result).flatMap(t=>[t.left.buffer,t.right.buffer]);self.postMessage({type:'result',result},transfers)}}catch(error){self.postMessage({type:'error',message:error.message||String(error)})}};
